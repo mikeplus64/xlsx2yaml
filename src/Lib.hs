@@ -1,9 +1,8 @@
-{-# LANGUAGE DeriveGeneric             #-}
 {-# LANGUAGE FlexibleContexts          #-}
+{-# LANGUAGE FlexibleInstances         #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings         #-}
 {-# LANGUAGE RecordWildCards           #-}
-{-# LANGUAGE FlexibleInstances         #-}
 
 module Lib (main, readSheet) where
 
@@ -27,7 +26,7 @@ import qualified Data.Text                  as T
 import qualified Data.Yaml                  as YAML
 import           Options.Generic            (getRecord)
 import           System.Exit                (exitFailure)
-import Xlsx2Yaml.CLI
+import           Xlsx2Yaml.CLI
 
 -- | Extract a YAML file from an XLSX thingo
 -- The first row of a sheet should have field names
@@ -56,7 +55,7 @@ readXlsxFile inFile = do
   xlsxx <- toXlsx <$> L.readFile inFile
   styles <-
     case parseStyleSheet (_xlStyles xlsxx) of
-      Left e -> throw e
+      Left e  -> throw e
       Right v -> pure v
   pure (xlsxx, styles)
 
@@ -75,7 +74,7 @@ readSheet' dataStartRow styles ss sheetToExtract =
               sheetToValue dataStartRow styles sheet
         in (sheetToExtract, sheetValue)
   in case ss ^? ixSheet sheetToExtract of
-       Just x -> pure (mkValue x)
+       Just x  -> pure (mkValue x)
        Nothing -> throwE sheetToExtract
 
 -- | Encode a worksheet as a JSON Object.
@@ -135,11 +134,15 @@ data OkCell =
 
 definedCellValues :: StyleSheet -> Worksheet -> M.Map (Int, Int) OkCell
 definedCellValues ss ws =
-  let formattedCells' = toFormattedCells (_wsCells ws) [] ss
-      p cell =
-         (OkCellValue <$> _formattedValue cell) <|> (OkFilled <$> _formattedFill cell)
+  let
+    formattedCells' = toFormattedCells (_wsCells ws) [] ss
 
-   in M.mapMaybe p formattedCells'
+    p :: FormattedCell -> Maybe OkCell
+    p cell =
+      (OkCellValue <$> cell^.formattedCell.cellValue) <|>
+      (OkFilled <$> cell^.formattedFormat.formatFill)
+
+  in M.mapMaybe p formattedCells'
 
 -- | Rendering to YAML/JSON
 
@@ -164,19 +167,19 @@ cellValueToValue (CellRich b) = JSON.String (b ^. traverse . richTextRunText)
 _CellText :: Prism' CellValue T.Text
 _CellText = prism' CellText g
  where g (CellText t) = Just t
-       g _ = Nothing
+       g _            = Nothing
 
 _CellDouble :: Prism' CellValue Double
 _CellDouble  = prism' CellDouble g
  where g (CellDouble t) = Just t
-       g _ = Nothing
+       g _              = Nothing
 
 _CellBool :: Prism' CellValue Bool
 _CellBool = prism' CellBool g
  where g (CellBool t) = Just t
-       g _ = Nothing
+       g _            = Nothing
 
 _CellRich :: Prism' CellValue [RichTextRun]
 _CellRich = prism' CellRich g
  where g (CellRich t) = Just t
-       g _ = Nothing
+       g _            = Nothing
